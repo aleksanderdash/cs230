@@ -21,12 +21,33 @@ def create_parser():
     parser.add_argument("--learning_rate", default=0.0005)
     parser.add_argument("--num_epochs", default=20)
     parser.add_argument("--batch_size", default=16)
+    parser.add_argument("--checkpoint_dir", default="checkpoints")
+    parser.add_argument("--load_from_checkpoint",
+                        help="Path to model checkpoint")
     parser.add_argument("--preprocess", action="store_true",
                         help="Preprocess the dataset given by data_dir to speed up training.")
     return parser
 
 def main(args):
-    model = DeepPepegaNet()
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    # Ensure model checkpoint directory exists
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+
+    train_loader = DataLoader(
+        VideoDataset(args.data_dir, split="train"),
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=2
+    )
+    validation_loader = DataLoader(
+        VideoDataset(args.data_dir, split="validation"),
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=2
+    )
+    model = DeepPepegaNet().to(device)
+    if args.load_from_checkpoint:
+        model.load_state_dict(torch.load(args.load_from_checkpoint))
     model.train()
     #fake_loss_weight = 1./6.5 # approx. 4/5 of the dataset are fake videos
     #loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1., fake_loss_weight]))
@@ -38,37 +59,41 @@ def main(args):
         fake_preds = 0
         correct_preds = 0
         total_preds = 0
-        for x, y in validation_tensors:
-            output = nn.functional.log_softmax(model(x), dim=1) # output is (50, 2)
-            total_preds += 1
-            cur_prediction = 1 if torch.mean(torch.argmax(output, dim=1).double()) > 0.5 else 0
-            print(torch.mean(torch.argmax(output, dim=1).double()).item(), end=', ')
-            if cur_prediction == 0:
-                real_preds += 1
-            else:
-                fake_preds += 1
-            if cur_prediction == y.item():
-                correct_preds += 1
+        for x, y in tqdm(validation_loader, desc="Evaluating model"):
+            output = nn.functional.log_softmax(model(x.to(device)), dim=1) # output is (50, 2)
+            total_preds += x.shape[0]
+            # cur_prediction = 1 if torch.mean(torch.argmax(output, dim=1).double()) > 0.5 else 0
+            # print(torch.mean(torch.argmax(output, dim=1).double()).item(), end=', ')
+            cur_predictions = torch.argmax(output, dim=1).cpu()
+            real_preds += torch.sum(cur_predictions == 0)
+            fake_preds += torch.sum(cur_predictions == 1)
+            correct_preds += torch.sum(cur_predictions == y.squeeze()).item()
         print ("{} real predictions and {} fake predictions.".format(real_preds, fake_preds))
         return 1. * correct_preds / total_preds
 
-   for epoch in range(num_epochs):
+    for epoch in range(args.num_epochs):
         losses = []
         i = 0
         for minibatch_data, minibatch_labels in tqdm(train_loader, desc="Epoch {}".format(epoch)):
+            m, n_frames, _, _, _ = minibatch_data.shape
+            if m == 1:
+                # Inception model crashes if batch size is 1
+                # so if we're at the end of an epoch, just keep going
+                continue
             if len(minibatch_labels) > 1:
                 minibatch_labels = torch.squeeze(minibatch_labels, dim=1)
             optimizer.zero_grad()
-            output = model(minibatch_data.cuda())
-            loss = loss_fn(output, minibatch_labels.cuda())
+            output = model(minibatch_data.to(device))
+            loss = loss_fn(output, minibatch_labels.to(device))
             loss.backward()
             optimizer.step()
             losses.append(loss.cpu().item())
             i += 1
             if i % 1000 == 0:
-                torch.save(model.state_dict(), "model_epoch_{}_iter_{}".format(epoch, i))
+                torch.save(model.state_dict(), "checkpoints/model_epoch_{}_iter_{}.pth".format(epoch, i))
                 print("Epoch {}, iter {}: Loss is {}".format(epoch, i, torch.mean(torch.tensor(losses))))
         print("Epoch {}: Loss is {}".format(epoch, torch.mean(torch.tensor(losses))))
+    model.eval()
     print("After training, accuracy is {}.".format(get_accuracy()))
         #prev_time = time.time()
         #for minibatch_data, minibatch_labels in tqdm(train_loader):
