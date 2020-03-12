@@ -63,12 +63,6 @@ class VideoDataset(Dataset):
         ])
         # Initialize the face detector
         #self.detector = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-        # Initialize embedding DNN
-        self.vgg16 = models.vgg16(pretrained=True)
-        for param in self.vgg16.parameters():
-            param.requires_grad = False
-        self.vgg16 = self.vgg16.features # We only need the features layer
-        self.memoized_embeddings = {}
     
     def get_target_from_path(self, path):
         label = 1 if self.metadata[path]["label"] == "FAKE" else 0
@@ -142,7 +136,7 @@ class VideoDataset(Dataset):
             pil_frame = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             left_x, upper_y, width, height = cur_face
             pil_frame = pil_frame.crop((left_x, upper_y, left_x + width, upper_y + height))
-            pil_frame = pil_frame.resize((224, 224), Image.LANCZOS)
+            pil_frame = pil_frame.resize((299, 299), Image.LANCZOS)
 
             # Convert PIL image to torch tensor
             cropped_faces.append(torch.unsqueeze(self.transform(pil_frame), dim=0))
@@ -152,17 +146,12 @@ class VideoDataset(Dataset):
 
     def __getitem__(self, index):
         #x = Image.open(os.path.join(self.basedir, self.image_paths[index]))
-        if index in self.memoized_embeddings:
-            return self.memoized_embeddings[index]
-
         if index < len(self.real_videos):
             video_name = self.real_videos[index]
         else:
             video_name = self.fake_videos[index - len(self.real_videos)]
-        x = self.vgg16(self.get_cropped_faces(video_name))
+        x = self.get_cropped_faces(video_name)
         y = self.get_target_from_path(video_name)
-        
-        self.memoized_embeddings[index] = (x, y)
         return x, y
     
     def __len__(self):
