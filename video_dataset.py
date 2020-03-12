@@ -193,6 +193,12 @@ class VideoDataset(Dataset):
             video_name = self.fake_videos[index - len(self.real_videos)]
         x = self.get_cropped_faces(video_name)
         y = self.get_target_from_path(video_name)
+        if (x.shape != (10, 3, 299, 299)):
+            print("ERROR: item at index {} (path {}) returned shape {}!".format(index, video_name, x.shape))
+            if len(x.shape) = 3:
+                x = torch.cat([x.unsqueeze(0) for _ in range(10)])
+            if x.shape[0] != 10:
+                x = torch.cat([x for _ in range(10)])[:10]
         return x, y
     
     def __len__(self):
