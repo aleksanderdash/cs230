@@ -71,27 +71,24 @@ def main(args):
         print ("{} real predictions and {} fake predictions.".format(real_preds, fake_preds))
         return 1. * correct_preds / total_preds
 
-    for epoch in range(args.num_epochs):
-        # Make a pass through the training set
-        train_perm = np.random.permutation(len(train_tensors))
-        cur_loss = 0.
-        for cur_batch_start in tqdm(range(0, len(train_tensors), args.batch_size), desc="Epoch {}".format(epoch)):
-            cur_minibatch_x = torch.cat([torch.unsqueeze(train_tensors[idx][0], dim=0)
-                for idx in train_perm[cur_batch_start:cur_batch_start + args.batch_size]])
-            cur_minibatch_y = torch.cat([torch.unsqueeze(train_tensors[idx][1], dim=0)
-                for idx in train_perm[cur_batch_start:cur_batch_start + args.batch_size]])
-            m, n_frames, _, _, _ = cur_minibatch_x.shape
-            cur_minibatch_x = cur_minibatch_x.reshape((-1, n_channels, filter_size, filter_size))
-
+   for epoch in range(num_epochs):
+        losses = []
+        i = 0
+        for minibatch_data, minibatch_labels in tqdm(train_loader, desc="Epoch {}".format(epoch)):
+            if len(minibatch_labels) > 1:
+                minibatch_labels = torch.squeeze(minibatch_labels, dim=1)
             optimizer.zero_grad()
-            output = model(cur_minibatch_x)
-            cur_minibatch_y = cur_minibatch_y.repeat_interleave(n_frames)
-            loss = loss_fn(output, cur_minibatch_y)
+            output = model(minibatch_data)
+            loss = loss_fn(output, minibatch_labels)
             loss.backward()
             optimizer.step()
-            cur_loss += loss.item() * m
-        print("Epoch {}: avg. loss is {}. Accuracy is {}.".format(epoch, cur_loss / len(train_tensors), get_accuracy()))
-    torch.save(model, "model.pkl")
+            losses.append(loss.item())
+            i += 1
+            if i % 1000 == 0:
+                torch.save(model.state_dict(), "model_epoch_{}_iter_{}".format(epoch, i))
+                print("Epoch {}, iter {}: Loss is {}".format(epoch, i, torch.mean(torch.tensor(losses))))
+        print("Epoch {}: Loss is {}".format(epoch, torch.mean(torch.tensor(losses))))
+    print("After training, accuracy is {}.".format(get_accuracy()))
         #prev_time = time.time()
         #for minibatch_data, minibatch_labels in tqdm(train_loader):
             #cur_time = time.time()
@@ -187,6 +184,7 @@ def foo():
     print("Before training, accuracy is {}.".format(get_accuracy()))
     for epoch in range(num_epochs):
         losses = []
+        i = 0
         for minibatch_data, minibatch_labels in tqdm(train_loader, desc="Epoch {}".format(epoch)):
             if len(minibatch_labels) > 1:
                 minibatch_labels = torch.squeeze(minibatch_labels, dim=1)
@@ -196,6 +194,9 @@ def foo():
             loss.backward()
             optimizer.step()
             losses.append(loss.item())
+            i += 1
+            if i % 1000 == 0:
+                torch.save(model.state_dict(), "model_epoch_{}_iter_{}".format(epoch, i))
         print("Epoch {}: Loss is {}".format(epoch, torch.mean(torch.tensor(losses))))
     print("After training, accuracy is {}.".format(get_accuracy()))
 
