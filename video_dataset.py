@@ -72,10 +72,13 @@ class VideoDataset(Dataset):
         if split == "debug":
             print("DEBUG: There are {} real videos and {} fake videos.".format(len(self.real_videos), len(self.fake_videos)))
         elif split == "train":
-            self.real_videos = self.real_videos[:-(num_validation_videos + num_test_videos)]
-            self.fake_videos = self.fake_videos[:-(num_validation_videos + num_test_videos)]
+            # Hardcoded to 2400 samples of each class for now
+            self.real_videos = self.real_videos[:2400]
+            self.fake_videos = self.fake_videos[:2400]
+            #self.real_videos = self.real_videos[:-(num_validation_videos + num_test_videos)]
+            #self.fake_videos = self.fake_videos[:-(num_validation_videos + num_test_videos)]
             # Make sure we only keep same number of real and fake videos
-            self.fake_videos = self.fake_videos[:len(self.real_videos)]
+            #self.fake_videos = self.fake_videos[:len(self.real_videos)]
         elif split == "validation":
             self.real_videos = self.real_videos[-(num_validation_videos + num_test_videos):-num_test_videos]
             self.fake_videos = self.fake_videos[-(num_validation_videos + num_test_videos):-num_test_videos]
@@ -97,6 +100,7 @@ class VideoDataset(Dataset):
         ])
         # Initialize the face detector
         #self.detector = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+        self.memoized = {}
     
     def get_target_from_path(self, path):
         label = 1 if self.metadata[path]["label"] == "FAKE" else 0
@@ -191,14 +195,17 @@ class VideoDataset(Dataset):
             video_name = self.real_videos[index]
         else:
             video_name = self.fake_videos[index - len(self.real_videos)]
-        x = self.get_cropped_faces(video_name)
         y = self.get_target_from_path(video_name)
+        if video_name in self.memoized:
+            return self.memoized[video_name], y
+        x = self.get_cropped_faces(video_name)
         if (x.shape != (10, 3, 299, 299)):
             print("ERROR: item at index {} (path {}) returned shape {}!".format(index, video_name, x.shape))
             if len(x.shape) == 3:
                 x = torch.cat([x.unsqueeze(0) for _ in range(10)])
             if x.shape[0] != 10:
                 x = torch.cat([x for _ in range(10)])[:10]
+        self.memoized[video_name] = x
         return x, y
     
     def __len__(self):

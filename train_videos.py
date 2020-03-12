@@ -38,14 +38,14 @@ def main(args):
     train_loader = DataLoader(
         VideoDataset(args.data_dir, split="train"),
         batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=args.num_dataloaders
+        shuffle=True#,
+        #num_workers=args.num_dataloaders
     )
     validation_loader = DataLoader(
         VideoDataset(args.data_dir, split="validation"),
         batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=args.num_dataloaders
+        shuffle=True#,
+        #num_workers=args.num_dataloaders
     )
     model = DeepPepegaNet().to(device)
     if args.load_from_checkpoint:
