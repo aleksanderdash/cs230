@@ -36,7 +36,7 @@ class DeepPepegaNet(nn.Module):
         """
         out = x.reshape(-1, 3, 299, 299)
         out = self.inception(out)
-        out = out.reshape(6, -1, 2048)
+        out = out.reshape(x.shape[1], -1, 2048)
         outputs, (hn, cn) = self.lstm(out)
         out = hn.reshape(-1, 512)
         out = self.dropout(out)

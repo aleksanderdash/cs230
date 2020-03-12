@@ -47,6 +47,7 @@ def main(args):
         return layer
     # Just something really simple for now
     model = DeepPepegaNet()
+    model.train()
     fake_loss_weight = 1./6.5 # approx. 4/5 of the dataset are fake videos
     loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1., fake_loss_weight]))
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
