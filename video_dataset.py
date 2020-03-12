@@ -26,32 +26,64 @@ from torch.utils.data import Dataset
 
 class VideoDataset(Dataset):
     def __init__(self, video_directory, split="train",
-                 num_validation_videos=20, process_every_n_frames=30):
+                 num_validation_videos=20, num_test_videos=20, process_every_n_frames=30):
         assert(os.path.exists(video_directory))
-        # Store metadata about which videos are real/fake
-        self.basedir = video_directory
-        with open(os.path.join(video_directory, "metadata.json")) as f_in:
-            self.metadata = json.load(f_in)
 
-        # Store the actual real and fake videos
+        self.basedir = video_directory
+        # Recursively walk through self.basedir and all subdirectories
+        all_metadata_filenames = []
+        all_video_filenames = []
+        for dirpath, _, filenames in os.walk(self.basedir):
+            for filename in filenames:
+                if filename.endswith(".json"):
+                    all_metadata_filenames.append(os.path.join(dirpath, filename))
+                elif filename.endswith(".mp4"):
+                    all_video_filenames.append(os.path.join(dirpath, filename))
+
+        # Store metadata about which videos are real/fake
+        self.metadata = {}
+        for cur_metadata_filename in all_metadata_filenames:
+            if split == "debug":
+                print("Processing metadata in file {}".format(cur_metadata_filename))
+            with open(cur_metadata_filename) as f_in:
+                cur_metadata = json.load(f_in)
+                for cur_key in cur_metadata:
+                    # Store expanded versions of paths of videos in metadata
+                    full_filename = os.path.join(os.path.dirname(cur_metadata_filename), cur_key)
+                    self.metadata[full_filename] = {'label': cur_metadata[cur_key]['label']}
+                    if 'original' in cur_metadata[cur_key] and cur_metadata[cur_key]['original']:
+                        full_orig_filename = os.path.join(os.path.dirname(cur_metadata_filename), cur_metadata[cur_key]['original'])
+                        self.metadata[full_filename]['original'] = full_orig_filename
+
+        # Store the actual real and fake videos' full pathnames
         self.real_videos = []
         self.fake_videos = []
-        for path in os.listdir(video_directory):
-            if path.endswith(".mp4"):
-                if self.metadata[path]['label'] == "FAKE":
-                    self.fake_videos.append(path)
-                else:
-                    self.real_videos.append(path)
+        for cur_video_filename in all_video_filenames:
+            if self.metadata[cur_video_filename]['label'] == "FAKE":
+                self.fake_videos.append(cur_video_filename)
+            else:
+                self.real_videos.append(cur_video_filename)
+        # Sort the pathnames since consecutive runs of os.walk aren't guaranteed
+        # to return all the data in the same order
+        self.real_videos.sort()
+        self.fake_videos.sort()
 
         # Train: leave 20 real and 20 fake videos for validation set
-        if split == "train":
-            self.real_videos = self.real_videos[:-num_validation_videos]
-            self.fake_videos = self.fake_videos[:-num_validation_videos]
+        if split == "debug":
+            print("DEBUG: There are {} real videos and {} fake videos.".format(len(self.real_videos), len(self.fake_videos)))
+        elif split == "train":
+            self.real_videos = self.real_videos[:-(num_validation_videos + num_test_videos)]
+            self.fake_videos = self.fake_videos[:-(num_validation_videos + num_test_videos)]
             # Make sure we only keep same number of real and fake videos
             self.fake_videos = self.fake_videos[:len(self.real_videos)]
+        elif split == "validation":
+            self.real_videos = self.real_videos[-(num_validation_videos + num_test_videos):-num_test_videos]
+            self.fake_videos = self.fake_videos[-(num_validation_videos + num_test_videos):-num_test_videos]
+        elif split == "test":
+            self.real_videos = self.real_videos[-num_test_videos:]
+            self.fake_videos = self.fake_videos[-num_test_videos:]
         else:
-            self.real_videos = self.real_videos[-num_validation_videos:]
-            self.fake_videos = self.fake_videos[-num_validation_videos:]
+            raise ValueError("Invalid split: must be debug, train, validation, or test")
 
         self.process_every_n_frames = process_every_n_frames
 
@@ -79,7 +111,7 @@ class VideoDataset(Dataset):
     # (since all videos are 10s at 30fps, each video contains 300 frames)
     def get_cropped_faces(self, video_path):
         self.detector = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-        vid = cv2.VideoCapture(os.path.join(self.basedir, video_path))
+        vid = cv2.VideoCapture(video_path)
         cropped_faces = []
 
         last_bbox = np.array([])
