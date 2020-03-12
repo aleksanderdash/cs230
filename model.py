@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 
 
-class DeepPepegaNet(nn.module):
+class DeepPepegaNet(nn.Module):
 
     def __init__(self):
         super(DeepPepegaNet, self).__init__()
