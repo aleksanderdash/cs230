@@ -121,6 +121,10 @@ class VideoDataset(Dataset):
             success, frame = vid.read()
             if not success:
                 break
+
+            # If we have all the frames we need, stop!
+            if len(cropped_faces) == 300 / self.process_every_n_frames:
+                break
             # Change the order here since sometimes videos have 299 frames instead of 300
             if count % self.process_every_n_frames != 0:
                 count += 1
@@ -178,6 +182,7 @@ class VideoDataset(Dataset):
             cropped_faces.append(torch.unsqueeze(self.transform(pil_frame), dim=0))
             #cropped_faces.append(torch.unsqueeze(transforms.ToTensor()(pil_frame), dim=0))
             last_bbox = cur_face
+        vid.release()
         return torch.cat(cropped_faces)
 
     def __getitem__(self, index):
