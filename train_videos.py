@@ -18,9 +18,9 @@ def create_parser():
     parser = argparse.ArgumentParser(description="Train NN model on video data.")
     parser.add_argument("data_dir",
                         help="Directory of source video files.")
-    parser.add_argument("--learning_rate", default=0.0005)
-    parser.add_argument("--num_epochs", default=20)
-    parser.add_argument("--batch_size", default=16)
+    parser.add_argument("--learning_rate", default=0.0005, type=float)
+    parser.add_argument("--num_epochs", default=20, type=int)
+    parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--checkpoint_dir", default="checkpoints")
     parser.add_argument("--load_from_checkpoint",
                         help="Path to model checkpoint")
@@ -32,6 +32,7 @@ def main(args):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     # Ensure model checkpoint directory exists
     os.makedirs(args.checkpoint_dir, exist_ok=True)
+    print("Model checkpoints will be saved to local directory {}".format(args.checkpoint_dir))
 
     train_loader = DataLoader(
         VideoDataset(args.data_dir, split="train"),
@@ -47,6 +48,7 @@ def main(args):
     )
     model = DeepPepegaNet().to(device)
     if args.load_from_checkpoint:
+        print("Loading saved model checkpoint from {}".format(args.load_from_checkpoint))
         model.load_state_dict(torch.load(args.load_from_checkpoint))
     model.train()
     #fake_loss_weight = 1./6.5 # approx. 4/5 of the dataset are fake videos
@@ -74,27 +76,39 @@ def main(args):
     for epoch in range(args.num_epochs):
         losses = []
         i = 0
-        for minibatch_data, minibatch_labels in tqdm(train_loader, desc="Epoch {}".format(epoch)):
-            m, n_frames, _, _, _ = minibatch_data.shape
-            if m == 1:
-                # Inception model crashes if batch size is 1
-                # so if we're at the end of an epoch, just keep going
-                continue
-            if len(minibatch_labels) > 1:
-                minibatch_labels = torch.squeeze(minibatch_labels, dim=1)
-            optimizer.zero_grad()
-            output = model(minibatch_data.to(device))
-            loss = loss_fn(output, minibatch_labels.to(device))
-            loss.backward()
-            optimizer.step()
-            losses.append(loss.cpu().item())
-            i += 1
-            if i % 1000 == 0:
-                torch.save(model.state_dict(), "checkpoints/model_epoch_{}_iter_{}.pth".format(epoch, i))
-                print("Epoch {}, iter {}: Loss is {}".format(epoch, i, torch.mean(torch.tensor(losses))))
+        with tqdm(train_loader, desc="Epoch {}".format(epoch)) as pbar:
+            cur_progress = {"status": "Loading data"}
+            pbar.set_postfix(cur_progress)
+            for minibatch_data, minibatch_labels in pbar:
+                cur_progress["status"] = "Training model"
+                pbar.set_postfix(cur_progress)
+                m, n_frames, _, _, _ = minibatch_data.shape
+                if m == 1:
+                    # Inception model crashes if batch size is 1
+                    # so if we're at the end of an epoch, just keep going
+                    continue
+                if len(minibatch_labels) > 1:
+                    minibatch_labels = torch.squeeze(minibatch_labels, dim=1)
+                optimizer.zero_grad()
+                output = model(minibatch_data.to(device))
+                loss = loss_fn(output, minibatch_labels.to(device))
+                loss.backward()
+                optimizer.step()
+                losses.append(loss.cpu().item())
+                cur_progress["loss"] = losses[-1]
+                i += 1
+                if i % 1000 == 0:
+                    torch.save(model.state_dict(), os.path.join(args.checkpoint_dir, "model_epoch_{}_iter_{}.pth".format(epoch, i)))
+                    print("Epoch {}, iter {}: Loss is {}".format(epoch, i, torch.mean(torch.tensor(losses))))
+                cur_progress["status"] = "Loading data"
+                pbar.set_postfix(cur_progress)
+            cur_progress["status"] = "Done"
+            cur_progress["loss"] = torch.mean(torch.tensor(losses))
+            pbar.set_postfix(cur_progress)
         print("Epoch {}: Loss is {}".format(epoch, torch.mean(torch.tensor(losses))))
+    torch.save(model.state_dict(), os.path.join(args.checkpoint_dir, "model_after_training_epoch_{}_iter_{}.pth".format(args.num_epochs, i)))
     model.eval()
-    print("After training, accuracy is {}.".format(get_accuracy()))
+    print("After training, validation accuracy is {}.".format(get_accuracy()))
         #prev_time = time.time()
         #for minibatch_data, minibatch_labels in tqdm(train_loader):
             #cur_time = time.time()
