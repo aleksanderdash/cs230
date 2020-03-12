@@ -22,7 +22,7 @@ class DeepPepegaNet(nn.Module):
         self.inception = torchvision.models.inception_v3(pretrained=True)
         del self.inception.AuxLogits
         self.inception = nn.Sequential(*(list(self.inception.children())[:-1]))
-        for param in self.inception.features.parameters():
+        for param in self.inception.parameters():
             param.requires_grad = False
 
         self.lstm = nn.LSTM(2048,512)

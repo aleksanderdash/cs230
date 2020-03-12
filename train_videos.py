@@ -12,6 +12,7 @@ import torchvision.models
 from video_dataset import VideoDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from model import DeepPepegaNet
 
 def create_parser():
     parser = argparse.ArgumentParser(description="Train NN model on video data.")
@@ -45,19 +46,7 @@ def main(args):
         nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
         return layer
     # Just something really simple for now
-    model = nn.Sequential(
-        nn.Flatten(),
-        he_initialized_linear(n_channels * filter_size * filter_size, 1024),
-        nn.ReLU(),
-        nn.BatchNorm1d(1024),
-        he_initialized_linear(1024, 512),
-        nn.ReLU(),
-        nn.BatchNorm1d(512),
-        he_initialized_linear(512, 128),
-        nn.ReLU(),
-        nn.BatchNorm1d(128),
-        nn.Linear(128, 2)
-    )
+    model = DeepPepegaNet()
     fake_loss_weight = 1./6.5 # approx. 4/5 of the dataset are fake videos
     loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1., fake_loss_weight]))
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
