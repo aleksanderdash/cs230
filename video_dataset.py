@@ -26,7 +26,7 @@ from torch.utils.data import Dataset
 
 class VideoDataset(Dataset):
     def __init__(self, video_directory, split="train",
-                 num_validation_videos=20, process_every_n_frames=6):
+                 num_validation_videos=20, process_every_n_frames=30):
         assert(os.path.exists(video_directory))
         # Store metadata about which videos are real/fake
         self.basedir = video_directory
@@ -47,6 +47,8 @@ class VideoDataset(Dataset):
         if split == "train":
             self.real_videos = self.real_videos[:-num_validation_videos]
             self.fake_videos = self.fake_videos[:-num_validation_videos]
+            # Make sure we only keep same number of real and fake videos
+            self.fake_videos = self.fake_videos[:len(self.real_videos)]
         else:
             self.real_videos = self.real_videos[-num_validation_videos:]
             self.fake_videos = self.fake_videos[-num_validation_videos:]
@@ -87,9 +89,11 @@ class VideoDataset(Dataset):
             success, frame = vid.read()
             if not success:
                 break
-            count += 1
+            # Change the order here since sometimes videos have 299 frames instead of 300
             if count % self.process_every_n_frames != 0:
+                count += 1
                 continue
+            count += 1
 
             # Convert image to grayscale and detect faces on it
             # (the face detector was trained on grayscale images)
@@ -101,10 +105,10 @@ class VideoDataset(Dataset):
                 if len(faces) == 0:
                     # Yikes, no faces detected! Use center of frame for now
                     cur_face = np.array([
-                        (frame.shape[0] - 224) / 2,
-                        (frame.shape[1] - 224) / 2,
-                        224,
-                        224
+                        (frame.shape[0] - 299) / 2,
+                        (frame.shape[1] - 299) / 2,
+                        299,
+                        299
                     ])
                 else:
                     # Use the model's best guess

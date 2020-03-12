@@ -26,30 +26,11 @@ def create_parser():
     return parser
 
 def main(args):
-    if args.preprocess:
-        preprocess_dataset(args)
-
-    train_tensor_file = os.path.join(args.data_dir, "train_tensors.pkl")
-    assert os.path.exists(train_tensor_file), ("Training tensors not found! "
-        "Be sure to run this script first with the --preprocess flag.")
-    validation_tensor_file = os.path.join(args.data_dir, "validation_tensors.pkl")
-    with open(train_tensor_file, "rb") as f_in:
-        train_tensors = pickle.load(f_in)
-    with open(validation_tensor_file, "rb") as f_in:
-        validation_tensors = pickle.load(f_in)
-    print("Loaded {} training examples and {} validation examples.".format(
-        len(train_tensors), len(validation_tensors)))
-    
-    n_channels, filter_size = 512, 7
-    def he_initialized_linear(in_channels, out_channels):
-        layer = nn.Linear(in_channels, out_channels)
-        nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
-        return layer
-    # Just something really simple for now
     model = DeepPepegaNet()
     model.train()
-    fake_loss_weight = 1./6.5 # approx. 4/5 of the dataset are fake videos
-    loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1., fake_loss_weight]))
+    #fake_loss_weight = 1./6.5 # approx. 4/5 of the dataset are fake videos
+    #loss_fn = nn.CrossEntropyLoss(weight=torch.tensor([1., fake_loss_weight]))
+    loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     def get_accuracy():
@@ -78,11 +59,11 @@ def main(args):
             if len(minibatch_labels) > 1:
                 minibatch_labels = torch.squeeze(minibatch_labels, dim=1)
             optimizer.zero_grad()
-            output = model(minibatch_data)
-            loss = loss_fn(output, minibatch_labels)
+            output = model(minibatch_data.cuda())
+            loss = loss_fn(output, minibatch_labels.cuda())
             loss.backward()
             optimizer.step()
-            losses.append(loss.item())
+            losses.append(loss.cpu().item())
             i += 1
             if i % 1000 == 0:
                 torch.save(model.state_dict(), "model_epoch_{}_iter_{}".format(epoch, i))
