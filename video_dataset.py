@@ -26,7 +26,7 @@ from torch.utils.data import Dataset
 
 class VideoDataset(Dataset):
     def __init__(self, video_directory, split="train",
-                 num_validation_videos=20, num_test_videos=20, process_every_n_frames=30):
+                 num_validation_videos=240, num_test_videos=240, process_every_n_frames=30):
         assert(os.path.exists(video_directory))
 
         self.basedir = video_directory

@@ -21,6 +21,7 @@ def create_parser():
     parser.add_argument("--learning_rate", default=0.0005, type=float)
     parser.add_argument("--num_epochs", default=20, type=int)
     parser.add_argument("--batch_size", default=16, type=int)
+    parser.add_argument("--num_dataloaders", default=2, type=int)
     parser.add_argument("--checkpoint_dir", default="checkpoints")
     parser.add_argument("--load_from_checkpoint",
                         help="Path to model checkpoint")
@@ -38,13 +39,13 @@ def main(args):
         VideoDataset(args.data_dir, split="train"),
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=2
+        num_workers=args.num_dataloaders
     )
     validation_loader = DataLoader(
         VideoDataset(args.data_dir, split="validation"),
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=2
+        num_workers=args.num_dataloaders
     )
     model = DeepPepegaNet().to(device)
     if args.load_from_checkpoint:
@@ -97,7 +98,7 @@ def main(args):
                 losses.append(loss.cpu().item())
                 cur_progress["loss"] = losses[-1]
                 i += 1
-                if i % 1000 == 0:
+                if i % 200 == 0:
                     torch.save(model.state_dict(), os.path.join(args.checkpoint_dir, "model_epoch_{}_iter_{}.pth".format(epoch, i)))
                     print("Epoch {}, iter {}: Loss is {}".format(epoch, i, torch.mean(torch.tensor(losses))))
                 cur_progress["status"] = "Loading data"
