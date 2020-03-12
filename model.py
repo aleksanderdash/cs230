@@ -20,6 +20,7 @@ class DeepPepegaNet(nn.Module):
     def __init__(self):
         super(DeepPepegaNet, self).__init__()
         self.inception = torchvision.models.inception_v3(pretrained=True)
+        del self.inception.AuxLogits
         self.inception = nn.Sequential(*(list(self.inception.children())[:-1]))
         for param in self.inception.features.parameters():
             param.requires_grad = False
