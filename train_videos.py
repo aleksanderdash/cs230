@@ -137,12 +137,12 @@ def get_accuracy(model, validation_loader, device):
         cur_predictions = torch.argmax(output, dim=1).cpu()
         real_preds += torch.sum(cur_predictions == 0)
         fake_preds += torch.sum(cur_predictions == 1)
-        correct_real_preds += torch.sum((cur_predictions == y.squeeze()) == (cur_predictions == 0)).item()
-        correct_fake_preds += torch.sum((cur_predictions == y.squeeze()) == (cur_predictions == 1)).item()
+        correct_real_preds += torch.sum((cur_predictions == y.squeeze()) & (cur_predictions == 0)).item()
+        correct_fake_preds += torch.sum((cur_predictions == y.squeeze()) & (cur_predictions == 1)).item()
         correct_preds += torch.sum(cur_predictions == y.squeeze()).item()
     print("{} real predictions and {} fake predictions.".format(real_preds, fake_preds))
-    print("For real videos, precision: {}, recall: {}".format(correct_real_preds / real_preds, correct_real_preds / num_each_class))
-    print("For fake videos, precision: {}, recall: {}".format(correct_fake_preds / fake_preds, correct_fake_preds / num_each_class))
+    print("For real videos, precision: {}, recall: {} ({} correct predictions)".format(1. * correct_real_preds / real_preds, 1. * correct_real_preds / num_each_class, correct_real_preds))
+    print("For fake videos, precision: {}, recall: {} ({} correct predictions)".format(1. * correct_fake_preds / fake_preds, 1. * correct_fake_preds / num_each_class, correct_fake_preds))
     return 1. * correct_preds / total_preds
 
 def evaluate_checkpoints(checkpoint_dir, data_dir, batch_size):
