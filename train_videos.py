@@ -123,7 +123,8 @@ def main(args):
     """
 
 def get_accuracy(model, validation_loader, device):
-    # There are 120 real and 120 fake videos in the dataset
+    # There are 240 real and 240 fake videos in the dataset
+    num_total = len(validation_loader)
     real_preds = 0
     fake_preds = 0
     correct_preds = 0
@@ -140,8 +141,8 @@ def get_accuracy(model, validation_loader, device):
         correct_fake_preds += torch.sum((cur_predictions == y.squeeze()) == (cur_predictions == 1)).item()
         correct_preds += torch.sum(cur_predictions == y.squeeze()).item()
     print("{} real predictions and {} fake predictions.".format(real_preds, fake_preds))
-    print("For real videos, precision: {}, recall: {}".format(correct_real_preds / real_preds, correct_real_preds / 120.))
-    print("For fake videos, precision: {}, recall: {}".format(correct_fake_preds / fake_preds, correct_fake_preds / 120.))
+    print("For real videos, precision: {}, recall: {}".format(correct_real_preds / real_preds, correct_real_preds / num_total))
+    print("For fake videos, precision: {}, recall: {}".format(correct_fake_preds / fake_preds, correct_fake_preds / num_total))
     return 1. * correct_preds / total_preds
 
 def evaluate_checkpoints(checkpoint_dir, data_dir, batch_size):
