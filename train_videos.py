@@ -25,11 +25,15 @@ def create_parser():
     parser.add_argument("--checkpoint_dir", default="checkpoints")
     parser.add_argument("--load_from_checkpoint",
                         help="Path to model checkpoint")
-    parser.add_argument("--preprocess", action="store_true",
-                        help="Preprocess the dataset given by data_dir to speed up training.")
+    parser.add_argument("--evaluate_checkpoints", action="store_true",
+                        help="Evaluate model checkpoints in checkpoint_dir on validation set.")
     return parser
 
 def main(args):
+    if args.evaluate_checkpoints:
+        evaluate_checkpoints(args.checkpoint_dir, args.data_dir, args.batch_size)
+        return
+
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     # Ensure model checkpoint directory exists
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -57,26 +61,9 @@ def main(args):
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    def get_accuracy():
-        real_preds = 0
-        fake_preds = 0
-        correct_preds = 0
-        total_preds = 0
-        for x, y in tqdm(validation_loader, desc="Evaluating model"):
-            output = nn.functional.log_softmax(model(x.to(device)), dim=1) # output is (50, 2)
-            total_preds += x.shape[0]
-            # cur_prediction = 1 if torch.mean(torch.argmax(output, dim=1).double()) > 0.5 else 0
-            # print(torch.mean(torch.argmax(output, dim=1).double()).item(), end=', ')
-            cur_predictions = torch.argmax(output, dim=1).cpu()
-            real_preds += torch.sum(cur_predictions == 0)
-            fake_preds += torch.sum(cur_predictions == 1)
-            correct_preds += torch.sum(cur_predictions == y.squeeze()).item()
-        print ("{} real predictions and {} fake predictions.".format(real_preds, fake_preds))
-        return 1. * correct_preds / total_preds
-
+    i = 0
     for epoch in range(args.num_epochs):
         losses = []
-        i = 0
         with tqdm(train_loader, desc="Epoch {}".format(epoch)) as pbar:
             cur_progress = {"status": "Loading data"}
             pbar.set_postfix(cur_progress)
@@ -109,7 +96,7 @@ def main(args):
         print("Epoch {}: Loss is {}".format(epoch, torch.mean(torch.tensor(losses))))
     torch.save(model.state_dict(), os.path.join(args.checkpoint_dir, "model_after_training_epoch_{}_iter_{}.pth".format(args.num_epochs, i)))
     model.eval()
-    print("After training, validation accuracy is {}.".format(get_accuracy()))
+    print("After training, validation accuracy is {}.".format(get_accuracy(model, validation_loader, device)))
         #prev_time = time.time()
         #for minibatch_data, minibatch_labels in tqdm(train_loader):
             #cur_time = time.time()
@@ -134,6 +121,46 @@ def main(args):
         if input() == "":
             break
     """
+
+def get_accuracy(model, validation_loader, device):
+    # There are 120 real and 120 fake videos in the dataset
+    real_preds = 0
+    fake_preds = 0
+    correct_preds = 0
+    correct_real_preds = 0
+    correct_fake_preds = 0
+    total_preds = 0
+    for x, y in tqdm(validation_loader, desc="Evaluating model"):
+        output = nn.functional.log_softmax(model(x.to(device)), dim=1) # output is (batch_size, 2)
+        total_preds += x.shape[0]
+        cur_predictions = torch.argmax(output, dim=1).cpu()
+        real_preds += torch.sum(cur_predictions == 0)
+        fake_preds += torch.sum(cur_predictions == 1)
+        correct_real_preds += torch.sum((cur_predictions == y.squeeze()) == (cur_predictions == 0)).item()
+        correct_fake_preds += torch.sum((cur_predictions == y.squeeze()) == (cur_predictions == 1)).item()
+        correct_preds += torch.sum(cur_predictions == y.squeeze()).item()
+    print("{} real predictions and {} fake predictions.".format(real_preds, fake_preds))
+    print("For real videos, precision: {}, recall: {}".format(correct_real_preds / real_preds, correct_real_preds / 120.))
+    print("For fake videos, precision: {}, recall: {}".format(correct_fake_preds / fake_preds, correct_fake_preds / 120.))
+    return 1. * correct_preds / total_preds
+
+def evaluate_checkpoints(checkpoint_dir, data_dir, batch_size):
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    model = DeepPepegaNet().to(device)
+    validation_loader = DataLoader(
+        VideoDataset(data_dir, split="validation"),
+        batch_size=batch_size,
+        shuffle=True
+    )
+    checkpoint_files = [filename for filename in os.listdir(checkpoint_dir) if filename.endswith(".pth")]
+    for checkpoint_filename in checkpoint_files:
+        print("Evaluating checkpoint file {}".format(checkpoint_filename))
+        model.load_state_dict(torch.load(os.path.join(checkpoint_dir, checkpoint_filename)))
+        model.eval()
+        accuracy = get_accuracy(model, validation_loader, device)
+        print("Model accuracy is {}".format(accuracy))
+        print("")
+    print("All done!")
 
 def preprocess_dataset(args):
     frames_per_example = 300 / 6 # should be 50 frames per example but some have 49 :(
@@ -193,7 +220,7 @@ def foo():
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
-    def get_accuracy():
+    def get_accuracy_old():
         correct_preds = 0
         total_preds = 0
         for minibatch_data, minibatch_labels in tqdm(train_loader, desc="Evaluating accuracy"):
@@ -202,7 +229,7 @@ def foo():
             correct_preds += torch.sum(torch.argmax(output, dim=1, keepdims=True) == minibatch_labels)
         return 1. * correct_preds / total_preds
 
-    print("Before training, accuracy is {}.".format(get_accuracy()))
+    print("Before training, accuracy is {}.".format(get_accuracy_old()))
     for epoch in range(num_epochs):
         losses = []
         i = 0
@@ -219,7 +246,7 @@ def foo():
             if i % 1000 == 0:
                 torch.save(model.state_dict(), "model_epoch_{}_iter_{}".format(epoch, i))
         print("Epoch {}: Loss is {}".format(epoch, torch.mean(torch.tensor(losses))))
-    print("After training, accuracy is {}.".format(get_accuracy()))
+    print("After training, accuracy is {}.".format(get_accuracy_old()))
 
 if __name__=='__main__':
     main(create_parser().parse_args())
